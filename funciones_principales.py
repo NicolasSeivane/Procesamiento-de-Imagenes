@@ -297,27 +297,42 @@ def cambio_signo(a, b):
     return (a < 0 and b > 0) or (a > 0 and b < 0)
 
 
-def aplicar_cruces(imagen,grises=True):
-    if grises is True:
-        H,W = imagen.shape[:2]
-        imagen_cruces = np.zeros_like(imagen)
-        for i in range(H - 1):
+def aplicar_cruces(imagen, grises=True):
+
+    if grises:
+        H, W = imagen.shape
+        imagen_cruces = np.zeros_like(imagen, dtype=np.uint8)
+
+        for i in range(H):
             for j in range(W - 1):
-                if cambio_signo(imagen[i, j],imagen[i, j + 1]) or cambio_signo(imagen[i, j],imagen[i+1, j]):
-                  imagen_cruces[i, j] = 255
+                if cambio_signo(imagen[i, j], imagen[i, j + 1]):
+                    imagen_cruces[i, j] = 255
                 else:
                     imagen_cruces[i, j] = 0
+
+        for j in range(W):
+            for i in range(H - 1):
+                if cambio_signo(imagen[i, j], imagen[i + 1, j]):
+                    imagen_cruces[i, j] = 255
+
     else:
-        H,W, C = imagen.shape
-        imagen_cruces = np.zeros_like(imagen)
-        for i in range(H - 1):
+        H, W, C = imagen.shape
+        imagen_cruces = np.zeros_like(imagen, dtype=np.uint8)
+
+        for i in range(H):
             for j in range(W - 1):
                 for c in range(C):
-                    if cambio_signo(imagen[i, j, c],imagen[i, j + 1, c]) or cambio_signo(imagen[i, j, c],imagen[i+1, j, c]):
+                    if cambio_signo(imagen[i, j, c], imagen[i, j + 1, c]):
                         imagen_cruces[i, j, c] = 255
                     else:
                         imagen_cruces[i, j, c] = 0
-    imagen_cruces = imagen_cruces.astype(np.uint8)
+
+        for j in range(W):
+            for i in range(H - 1):
+                for c in range(C):
+                    if cambio_signo(imagen[i, j, c], imagen[i + 1, j, c]):
+                        imagen_cruces[i, j, c] = 255
+
     return imagen_cruces
                     
 
@@ -349,16 +364,14 @@ def aplicar_cruces_umbral(imagen, umbral, grises=True):
     imagen_cruces = imagen_cruces.astype(np.uint8)
     return imagen_cruces
 
-def Leclerc(valor,sigma_sensibilidad):
+def Leclerc(valor,sigma_sensibilidad=1):
     division = -(valor**2) / (sigma_sensibilidad**2)
     resultado = np.exp(division)
-
     return resultado
 
-def Lorentz(valor,sigma_sensibilidad):
+def Lorentz(valor,sigma_sensibilidad=1):
     division = -(valor**2) / (sigma_sensibilidad**2)
     resultado = 1 / (division + 1)
-
     return resultado
 
 def funcion_g(valor,sigma_sensibilidad, funcion="Leclerc"):

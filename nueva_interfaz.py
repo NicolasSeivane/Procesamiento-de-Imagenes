@@ -379,12 +379,12 @@ def aplicar_ruido():
         set_status("No hay imagen de trabajo.")
         return
     
-    if len(imagen_operativa.shape) == 3:
+    if len(imagen_operativa.shape) == 2:
         grises = imagen_operativa.copy()
 
 
         imagen_ruidosa = grises.copy().astype(np.float32)
-        H, W = imagen_ruidosa.shape
+        H, W = imagen_ruidosa.shape[:2]
 
         if tipo_ruido == "Sal y Pimienta":
             p = ruido_sal_pimineta
@@ -952,61 +952,100 @@ def sobel_magnitud():
     set_status("Sobel Magnitud aplicado a la imagen de trabajo.")
 
 umbral_cruces = None
+laplace_gauss = None
 
 def aplicar_cruces_simbolos():
-    global imagen_actual, imagen_operativa
+    global imagen_actual, imagen_operativa, laplace_gauss
     if imagen_actual is None:
         set_status("Primero cargá una imagen base.")
         return
 
-    mascara_laplace = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
+    sigma = laplace_gauss if laplace_gauss else 0.0
 
     imagen_original = imagen_actual.copy().astype(np.float32)
 
-    
+    if sigma > 0:
+        t = int((4 * sigma) + 1)
+        ax = np.linspace(-(t - 1) / 2, (t - 1) / 2, t)
+        xx, yy = np.meshgrid(ax, ax)
+        r2 = xx**2 + yy**2
+
+        mascara = ((r2 - 2 * sigma**2) / sigma**4) * np.exp(-r2 / (2 * sigma**2))
+        tipo = "Marr Hildreth"
+        set_status(f"Aplicando Laplaciano del Gaussiano con sigma={sigma:.2f}")
+
+    else:
+        mascara = np.array([[0, -1, 0],
+                            [-1, 4, -1],
+                            [0, -1, 0]], dtype=np.float32)
+        tipo = "Laplace"
+        set_status("Aplicando Laplaciano simple")
 
     if len(imagen_original.shape) == 3:
-        laplace_img = fc.mascara(imagen_original, mascara_laplace, "Laplace", grises=False)
-        imagen_actual = fc.aplicar_cruces(laplace_img,False)
+        laplace_img = fc.mascara(imagen_original, mascara, tipo, grises=False)
+        imagen_actual = fc.aplicar_cruces(laplace_img, False)
     else:
-        laplace_img = fc.mascara(imagen_original, mascara_laplace, "Laplace", grises=True)
-        imagen_actual = fc.aplicar_cruces(laplace_img,True)
+        laplace_img = fc.mascara(imagen_original, mascara, tipo, grises=True)
+        imagen_actual = fc.aplicar_cruces(laplace_img, True)
 
 
-    mostrar_imagen(imagen_actual, lblOutputImage)
-    set_status("Cruces signo aplicado a la imagen de trabajo.")
+    imagen_operativa = imagen_actual
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+    set_status(f"Cruces por signo aplicados ({tipo}).")
 
 
 def aplicar_cruces_umbral():
-    global umbral_cruces,imagen_actual, imagen_operativa
+    global umbral_cruces,imagen_actual, imagen_operativa,laplace_gauss
     if imagen_actual is None:
         set_status("Primero cargá una imagen base.")
         return
 
-    mascara_laplace = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
+    sigma = laplace_gauss if laplace_gauss else 0.0
 
     imagen_original = imagen_actual.copy().astype(np.float32)
 
-    
+    if sigma > 0:
+        t = int((4 * sigma) + 1)
+        ax = np.linspace(-(t - 1) / 2, (t - 1) / 2, t)
+        xx, yy = np.meshgrid(ax, ax)
+        r2 = xx**2 + yy**2
+
+        mascara = ((r2 - 2 * sigma**2) / sigma**4) * np.exp(-r2 / (2 * sigma**2))
+        tipo = "Marr Hildreth"
+        set_status(f"Aplicando Laplaciano del Gaussiano con sigma={sigma:.2f}")
+
+    else:
+        mascara = np.array([[0, -1, 0],
+                            [-1, 4, -1],
+                            [0, -1, 0]], dtype=np.float32)
+        tipo = "Laplace"
+        set_status("Aplicando Laplaciano simple")
 
     if len(imagen_original.shape) == 3:
-        laplace_img = fc.mascara(imagen_original, mascara_laplace, "Laplace", grises=False)
-        imagen_operativa = fc.aplicar_cruces_umbral(laplace_img,umbral_cruces,False)
+        laplace_img = fc.mascara(imagen_original, mascara, tipo, grises=False)
+        imagen_actual = fc.aplicar_cruces_umbral(laplace_img,umbral_cruces, False)
     else:
-        laplace_img = fc.mascara(imagen_original, mascara_laplace, "Laplace", grises=True)
-        imagen_operativa = fc.aplicar_cruces_umbral(laplace_img, umbral_cruces, True)
+        laplace_img = fc.mascara(imagen_original, mascara, tipo, grises=True)
+        imagen_actual = fc.aplicar_cruces_umbral(laplace_img,umbral_cruces, True)
 
-
+    imagen_operativa = imagen_actual
     mostrar_imagen(imagen_operativa, lblOutputImage)
     set_status("Cruces umbral aplicado a la imagen de trabajo.")
 
 
 def pedir_umbral():
- global umbral_cruces
+ global umbral_cruces,laplace_gauss
 
  umbral_cruces = simpledialog.askfloat("Umbral", "Ingrese el umbral para el cual se aplicara el cruce")
+ laplace_gauss = simpledialog.askfloat("Sigma", "Poner 0 si Lapalce comun")
  aplicar_cruces_umbral()
 
+
+def pedir_laplace():
+ global laplace_gauss
+
+ laplace_gauss = simpledialog.askfloat("Sigma", "Poner 0 si Lapalce comun")
+ aplicar_cruces_simbolos()
 
 t_difusion = None
 lamba_anistropica = None
@@ -1144,7 +1183,7 @@ def pedir_anistropica():
 def pedir_t():
  global t_difusion,lamba_anistropica
 
- t_difusion = simpledialog.askfloat("t", "Ingrese el desvio estandar para la difusión")
+ t_difusion = simpledialog.askfloat("t", "Ingrese el t para la difusión")
  lamba_anistropica = simpledialog.askfloat("lamba", "Ingrese el lamba para la difusión")
 
  difusion_isotropica()
@@ -1245,7 +1284,7 @@ def mostrar_controles(opcion):
     elif opcion == "Sobel Magnitud":
         ttk.Button(dynamic_controls_frame, text="Aplicar Sobel Magnitud", command=sobel_magnitud).pack(side="left", padx=5)
     elif opcion == "Cruces por cero":
-        ttk.Button(dynamic_controls_frame, text="Aplicar Cruces por cero", command=aplicar_cruces_simbolos).pack(side="left", padx=5)
+        ttk.Button(dynamic_controls_frame, text="Aplicar Cruces por cero", command=pedir_laplace).pack(side="left", padx=5)
     elif opcion == "Cruces por umbral":
         ttk.Button(dynamic_controls_frame, text="Aplicar Cruces por umbral", command=pedir_umbral).pack(side="left", padx=5)
     elif opcion == "Difusion Isotropica":
