@@ -1,0 +1,6 @@
+tk
+opencv-python
+imutils
+numpy
+Pillow
+matplotlib
