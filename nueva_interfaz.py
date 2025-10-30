@@ -244,10 +244,15 @@ def mascara():
 # ==================
 def elegir_imagen():
     global imagen_original, imagen_actual, roi_actual, imagen_operativa
-    file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff")])
+    file_path = filedialog.askopenfilename( filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff;*.pgm")])
     if not file_path:
         return
-    img = cv2.imread(file_path, cv2.IMREAD_COLOR)
+    ext = file_path.split('.')[-1].lower()
+    
+    if ext == "pgm":
+        img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+    else:
+        img = cv2.imread(file_path, cv2.IMREAD_COLOR)
     if img is None:
         set_status("No se pudo abrir la imagen.")
         return
@@ -831,7 +836,7 @@ dynamic_controls_frame = ttk.Frame(frm_ops)
 dynamic_controls_frame.pack(side="left", padx=10)
 
 # Dropdown for operations
-opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral"]
+opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral", "Canny","Susan"]
 opcion_seleccionada = tk.StringVar(root)
 opcion_seleccionada.set(opciones[0])
 menu_opciones = ttk.OptionMenu(frm_ops, opcion_seleccionada, *opciones, command=lambda op: mostrar_controles(op))
@@ -1163,6 +1168,99 @@ def umbralizacion_Otsu():
     mostrar_imagen(imagen_operativa, lblOutputImage)
     set_status(f"Umbral iterativo aplicado a la imagen de trabajo. Umbral/es aplicados {umbral}")
 
+
+umbral1 = None
+umbral2 = None
+sigma_var = None
+
+def bordes_canny():
+    global imagen_actual, imagen_operativa, umbral1, umbral2, sigma_var
+
+    if imagen_actual is None:
+        set_status("Primero cargá una imagen base.")
+        return
+    
+    imagen_original = imagen_actual.copy().astype(np.float32)
+    sigma = sigma_var
+    t = int((2*sigma )+1)
+    ax = np.linspace(-(t - 1) / 2, (t - 1) / 2, t) # Genera un arreglo de coordenadas lineales entre -(t-1)/2 y (t-1)/2.
+    xx, yy = np.meshgrid(ax, ax) # Crea dos matrices 2D que representan las coordenadas X e Y de una cuadrícula de tamaño t x t
+    kernel_init = np.exp(-(xx**2 + yy**2) / (2 * sigma**2))
+
+    ## Primero aplicamos filtro gaussiano
+    mascara_horizontal = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
+    mascara_vertical = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+
+
+    if len(imagen_original.shape) == 2:
+        imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=False)
+        sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True, prewitt=False, estandarizar=False)
+        sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True, prewitt=False, estandarizar=False)
+    else:
+        imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=False,estandarizar=False)
+        sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=False, prewitt=False, estandarizar=False)
+        sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical", grises=False, prewitt=False, estandarizar=False)
+
+    magnitud = np.sqrt(sobel_horizontal.astype(np.float32)**2 + sobel_vertical.astype(np.float32)**2)
+    direccion = np.arctan2(sobel_vertical, sobel_horizontal) * (180.0 / np.pi)
+    direccion[direccion < 0] += 180
+
+    if len(imagen_original.shape) == 3:
+
+        bordes = fc.bordes_canny(magnitud,direccion,grises=False,umbral1=umbral1,umbral2=umbral2)
+    else:
+
+
+        bordes = fc.bordes_canny(magnitud,direccion,grises=True,umbral1=umbral1,umbral2=umbral2)
+
+    imagen_operativa = bordes
+
+
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+    set_status(f"Bordes Canny aplicado a la imagen de trabajo.")
+
+
+umbral_susan = None
+tipo_susan = None
+
+def susan_bordes():
+    global imagen_actual, imagen_operativa, umbral_susan,tipo_susan
+
+    if imagen_actual is None:
+        set_status("Primero cargá una imagen base.")
+        return
+    
+    imagen_original = imagen_actual.copy().astype(np.float32)
+
+
+    if len(imagen_original.shape) == 3:
+        imagen_original = cv2.cvtColor(imagen_original, cv2.COLOR_BGR2GRAY)
+
+    bordes = fc.susan_bordes(imagen_original, umbral=umbral_susan, tipo=str(tipo_susan))
+    imagen_operativa = bordes
+
+
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+    set_status(f"Bordes Susan aplicado a la imagen de trabajo.")
+
+
+def pedir_susan():
+    global umbral_susan,tipo_susan
+
+    umbral_susan = simpledialog.askfloat("Umbral", "Ingrese el umbral para Susan")
+    tipo_susan = simpledialog.askstring("Tipo", "Ingrese el tipo de Susan (bordes/esquina)")
+    susan_bordes()
+
+
+def pedir_bordes_canny():
+    global umbral1,umbral2,sigma_var
+
+    umbral1 = simpledialog.askfloat("Umbral 1", "Ingrese el umbral 1 para Canny")
+    umbral2 = simpledialog.askfloat("Umbral 2", "Ingrese el umbral 2 para Canny")
+    sigma_var = simpledialog.askfloat("Sigma", "Ingrese el sigma para el filtro gaussiano previo")
+    bordes_canny()
+
+
 def pedir_umbral_iterativa():
 
     global t_inicial,t_predefinido
@@ -1300,7 +1398,10 @@ def mostrar_controles(opcion):
 
     elif opcion == "Umbral Otsu":
         ttk.Button(dynamic_controls_frame, text="Aplicar Umbral Otsu", command=umbralizacion_Otsu).pack(side="left", padx=5)
-
+    elif opcion == "Canny":
+        ttk.Button(dynamic_controls_frame, text="Aplicar Bordes Canny", command=pedir_bordes_canny).pack(side="left", padx=5)
+    elif opcion == "Susan":
+        ttk.Button(dynamic_controls_frame, text="Aplicar Susan", command=pedir_susan).pack(side="left", padx=5)
 
 
 root.mainloop()
