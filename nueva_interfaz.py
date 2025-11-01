@@ -836,7 +836,7 @@ dynamic_controls_frame = ttk.Frame(frm_ops)
 dynamic_controls_frame.pack(side="left", padx=10)
 
 # Dropdown for operations
-opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral", "Canny","Susan"]
+opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral", "Canny","Susan", "Intercambio de Pixeles"]
 opcion_seleccionada = tk.StringVar(root)
 opcion_seleccionada.set(opciones[0])
 menu_opciones = ttk.OptionMenu(frm_ops, opcion_seleccionada, *opciones, command=lambda op: mostrar_controles(op))
@@ -1191,27 +1191,28 @@ def bordes_canny():
     mascara_horizontal = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
     mascara_vertical = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
 
-
-    if len(imagen_original.shape) == 2:
-        imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=False)
-        sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True, prewitt=False, estandarizar=False)
-        sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True, prewitt=False, estandarizar=False)
-    else:
-        imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=False,estandarizar=False)
-        sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=False, prewitt=False, estandarizar=False)
-        sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical", grises=False, prewitt=False, estandarizar=False)
-
-    magnitud = np.sqrt(sobel_horizontal.astype(np.float32)**2 + sobel_vertical.astype(np.float32)**2)
-    direccion = np.arctan2(sobel_vertical, sobel_horizontal) * (180.0 / np.pi)
-    direccion[direccion < 0] += 180
-
     if len(imagen_original.shape) == 3:
+        imagen_original = cv2.cvtColor(imagen_original, cv2.COLOR_BGR2GRAY)
 
-        bordes = fc.bordes_canny(magnitud,direccion,grises=False,umbral1=umbral1,umbral2=umbral2)
-    else:
+    imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=True,prewitt=False)
+    sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True, prewitt=False, estandarizar=False)
+    sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True, prewitt=False, estandarizar=False)
 
 
-        bordes = fc.bordes_canny(magnitud,direccion,grises=True,umbral1=umbral1,umbral2=umbral2)
+    magnitud = np.sqrt(sobel_horizontal.astype(np.float32)**2 + sobel_vertical.astype(np.float32)**2).astype(np.float32)
+    print(f'magnitud: {np.min(magnitud)}, {np.max(magnitud)}')
+    direccion = np.arctan2(sobel_vertical, sobel_horizontal)
+    print(f'direccion min y max antes de grados: {np.min(direccion)}, {np.max(direccion)}')
+    direccion = np.rad2deg(direccion)
+    print(f'direccion min y max despues de grados: {np.min(direccion)}, {np.max(direccion)}')
+    direccion[direccion < 0] += 180
+    print(f'direccion min y max despues de ajuste: {np.min(direccion)}, {np.max(direccion)}')
+    magnitud = magnitud.astype(np.float32)
+    magnitud = np.clip(magnitud, 0, 255).astype(np.float32)
+    print(f'magnitud min y max despues de normalizacion: {np.min(magnitud)}, {np.max(magnitud)}')
+    
+
+    bordes = fc.bordes_canny(magnitud,direccion,umbral1=int(umbral1),umbral2=int(umbral2))
 
     imagen_operativa = bordes
 
@@ -1294,6 +1295,188 @@ def pedir_bilateral():
  sigma_espacial = simpledialog.askfloat("sigma espacial", "Ingrese el sigma espacial")
 
  filtro_bilateral()
+
+
+def seleccionar_regiones_y_rectangulo():
+    """
+    Abre una ventana para seleccionar dos regiones rectangulares con el mouse y calcula el promedio de color.
+    También permite seleccionar un rectángulo adicional de píxeles dentro de la imagen.
+    Devuelve los promedios de color y las matrices de las regiones seleccionadas.
+    """
+    global imagen_actual, imagen_operativa, roi_actual
+
+    if imagen_actual is None:
+        set_status("Primero cargá una imagen base.")
+        return
+    if len(imagen_actual.shape) == 3 and imagen_actual.shape[2] == 3:
+
+        imagen_actual = cv2.cvtColor(imagen_actual, cv2.COLOR_BGR2GRAY)
+    else:
+        imagen_actual = imagen_actual.copy()
+
+    regiones = []
+    rectangulo = None
+    promedios = []
+
+    seleccionando = False
+    x0, y0 = -1, -1
+
+    def seleccionar_region(event, x, y, flags, param):
+        nonlocal seleccionando, x0, y0, regiones
+        if event == cv2.EVENT_LBUTTONDOWN:
+            seleccionando = True
+            x0, y0 = x, y
+        elif event == cv2.EVENT_MOUSEMOVE and seleccionando:
+            imagen_temp = imagen_mostrar.copy()
+            cv2.rectangle(imagen_temp, (x0, y0), (x, y), 255, 1)
+            cv2.imshow("Seleccionar regiones", imagen_temp)
+        elif event == cv2.EVENT_LBUTTONUP:
+            seleccionando = False
+            x1, y1 = x, y
+            regiones.append((x0, y0, x1, y1))
+            cv2.rectangle(imagen_mostrar, (x0, y0), (x1, y1), 255, 1)
+            cv2.imshow("Seleccionar regiones", imagen_mostrar)
+
+    def seleccionar_rectangulo(event, x, y, flags, param):
+        nonlocal rectangulo, seleccionando, x0, y0
+        if event == cv2.EVENT_LBUTTONDOWN:
+            seleccionando = True
+            x0, y0 = x, y
+        elif event == cv2.EVENT_MOUSEMOVE and seleccionando:
+            imagen_temp = imagen_mostrar.copy()
+            cv2.rectangle(imagen_temp, (x0, y0), (x, y), 128, 2)
+            cv2.imshow("Seleccionar rectángulo", imagen_temp)
+        elif event == cv2.EVENT_LBUTTONUP:
+            seleccionando = False
+            rectangulo = (x0, y0, x, y)
+            cv2.rectangle(imagen_mostrar, (x0, y0), (x, y), 128, 2)
+            cv2.imshow("Seleccionar rectángulo", imagen_mostrar)
+
+    # Crear una copia de la imagen para mostrar
+    imagen_mostrar = imagen_actual.copy()
+
+    
+
+    # Paso 1: Seleccionar dos regiones rectangulares
+    cv2.imshow("Seleccionar regiones", imagen_mostrar)
+    cv2.setMouseCallback("Seleccionar regiones", seleccionar_region)
+    set_status("Selecciona dos regiones rectangulares con clic izquierdo y arrastre.")
+    while len(regiones) < 2:
+        cv2.waitKey(1)
+    cv2.destroyWindow("Seleccionar regiones")
+
+    # Calcular promedios de intensidad (escalar)
+    for (x0, y0, x1, y1) in regiones:
+        x0, x1 = sorted([x0, x1])
+        y0, y1 = sorted([y0, y1])
+        region = imagen_actual[y0:y1, x0:x1]
+        promedio = float(region.mean())
+        promedios.append(promedio)
+
+    set_status(f"Promedios de intensidad: {promedios}")
+
+
+
+
+    print(promedios, type(promedios[0]), type(promedios[1]))
+
+
+    # Paso 2: Seleccionar un rectángulo adicional
+    seleccionando = False
+    x0, y0 = -1, -1
+    cv2.imshow("Seleccionar rectángulo", imagen_mostrar)
+    cv2.setMouseCallback("Seleccionar rectángulo", seleccionar_rectangulo)
+    set_status("Selecciona un rectángulo adicional arrastrando con el mouse.")
+    while rectangulo is None:
+        cv2.waitKey(1)
+    cv2.destroyWindow("Seleccionar rectángulo")
+
+    # Extraer las coordenadas del rectángulo adicional
+    x0, y0, x1, y1 = rectangulo
+    x0, x1 = sorted([x0, x1])
+    y0, y1 = sorted([y0, y1])
+
+    set_status(f"Rectángulo seleccionado: ({x0}, {y0}) a ({x1}, {y1})")
+
+    # Tamaño de la imagen
+    h, w = imagen_actual.shape[:2]
+
+    # Fondo por defecto
+    matriz_final = np.full((h, w), 3, dtype=np.int8)  # fondo = 3
+
+    # Lout (borde más externo)
+    grosor = 2
+    y0o, y1o = max(0, y0-2*grosor), min(h, y1+2*grosor)
+    x0o, x1o = max(0, x0-2*grosor), min(w, x1+2*grosor)
+    matriz_final[y0o:y1o, x0o:x1o] = 1
+
+    # Lin (borde interno)
+    y0i, y1i = max(0, y0-grosor), min(h, y1+grosor)
+    x0i, x1i = max(0, x0-grosor), min(w, x1+grosor)
+    matriz_final[y0i:y1i, x0i:x1i] = -1
+
+    # Objeto (interior del rectángulo)
+    matriz_final[y0:y1, x0:x1] = -3
+
+
+    roi_actual = imagen_mostrar
+    mostrar_imagen(roi_actual, lblROI, 300)
+
+    def visualizar_mascara(matriz):
+        """
+        Visualiza la matriz de etiquetas:
+            3   -> fondo (azul)
+            1   -> Lout (rojo)
+            -1  -> Lin (verde)
+            -3  -> objeto (blanco)
+        """
+        h, w = matriz.shape
+        visual = np.zeros((h, w), dtype=np.uint8)
+
+        visual[matriz == 3] = [255]      
+        visual[matriz == 1] = [0]      
+        visual[matriz == -1] = [150]     
+        visual[matriz == -3] = [255] 
+
+        cv2.imshow("Máscara inicial", visual)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    visualizar_mascara(matriz_final)
+
+    return promedios, matriz_final
+
+
+def pedir_seleccion_regiones_y_rectangulo():
+    promedios, matriz_final = seleccionar_regiones_y_rectangulo()
+    set_status(f"Promedios de color: {promedios}, Matrices obtenidas. Rectángulo adicional seleccionado.")
+
+
+def intercambio_de_pixeles():
+    global imagen_actual, imagen_operativa
+    if imagen_actual is None:
+            set_status("Primero cargá una imagen base.")
+            return
+    
+    promedios, matriz_final = seleccionar_regiones_y_rectangulo()
+
+    iteraciones = 10000  # Número máximo de iteraciones
+    for i in range(iteraciones):
+        set_status(f"Intercambio de píxeles: Iteración {i+1} de {iteraciones}")
+
+        matriz_anterior = matriz_final.copy()
+
+        matriz_final = fc.intercambio_de_pixeles(imagen_actual, promedios, matriz_final)
+
+        imagen_operativa = fc.matriz_a_visual(imagen_actual, matriz_final) 
+        mostrar_imagen(imagen_operativa, lblOutputImage)
+
+        # Comprobamos si hubo cambios
+        if np.array_equal(matriz_final, matriz_anterior):
+            set_status(f"No hubo cambios en la iteración {i+1}. Se detiene.")
+            break
+
+
+ttk.Button(frm_file_ops, text="Seleccionar Regiones y rectángulos", command=pedir_seleccion_regiones_y_rectangulo).pack(side="left", padx=7)
 
 # --- Math Operations Collapsible Panel ---
 math_panel_container = ttk.Frame(frm_ops)
@@ -1402,6 +1585,7 @@ def mostrar_controles(opcion):
         ttk.Button(dynamic_controls_frame, text="Aplicar Bordes Canny", command=pedir_bordes_canny).pack(side="left", padx=5)
     elif opcion == "Susan":
         ttk.Button(dynamic_controls_frame, text="Aplicar Susan", command=pedir_susan).pack(side="left", padx=5)
-
+    elif opcion == "Intercambio de Pixeles":
+        ttk.Button(dynamic_controls_frame, text="Aplicar Intercambio de Pixeles", command=intercambio_de_pixeles).pack(side="left", padx=5)
 
 root.mainloop()

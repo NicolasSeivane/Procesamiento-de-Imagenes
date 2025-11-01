@@ -636,115 +636,55 @@ def umbralizacion_Otsu(imagen,grises=True):
         return imagen_binaria, umbrales
 
     
-def bordes_canny(imagen,direccion, grises=True, umbral1=100, umbral2=200):
+def bordes_canny(magnitud,direccion, umbral1=100, umbral2=200):
 
-    if grises:
-        h, w = imagen.shape[:2]
-        Z = np.zeros((h,w), dtype=np.float32)
-        for i in range(h):
-            for j in range(w):
+    h, w = magnitud.shape[:2]
+    Z = np.zeros((h,w), dtype=np.float32)
+    for i in range(1, h-1):
+        for j in range(1, w-1):
+            angle = direccion[i, j]
+            
+            if (0 <= angle < 22.5) or (157.5 <= angle <= 180):
+                q = magnitud[i, j+1]
+                r = magnitud[i, j-1]
+            elif (22.5 <= angle < 67.5):
+                q = magnitud[i-1, j+1]
+                r = magnitud[i+1, j-1]
+            elif (67.5 <= angle < 112.5):
+                q = magnitud[i+1, j]
+                r = magnitud[i-1, j]
+            elif (112.5 <= angle < 157.5):
+                q = magnitud[i-1, j-1]
+                r = magnitud[i+1, j+1]
+            
+            if (magnitud[i, j] >= q) and (magnitud[i, j] >= r):
+                Z[i, j] = magnitud[i, j]
+            else:
+                Z[i, j] = 0
 
-                ## Zona amarilla, se miran los pixeles de la izquierda y derecha
-                if (0 <= direccion[i,j] < 22.5) or (157.5 <= direccion[i,j] <= 180):
-                    q = imagen[i, j + 1] if j + 1 < w else 0
-                    r = imagen[i, j - 1] if j - 1 >= 0 else 0
+    Z[Z < umbral1] = 0
+    Z[Z >= umbral2] = 255
+    mid = (Z >= umbral1) & (Z < umbral2)
+    Z[mid] = 128
 
-                # Zona verde, se miran los pixeles en diagonal derecha arriba y izquierda abajo
-                elif (22.5 <= direccion[i,j] < 67.5):
-                    q = imagen[i + 1, j - 1] if i + 1 < h and j - 1 >= 0 else 0
-                    r = imagen[i - 1, j + 1] if i - 1 >= 0 and j + 1 < w else 0
-
-                # Zona azul, se miran los pixeles arriba y abajo
-                elif (67.5 <= direccion[i,j] < 112.5):
-                    q = imagen[i + 1, j] if i + 1 < h else 0
-                    r = imagen[i - 1, j] if i - 1 >= 0 else 0
-
-                # Zona roja, se miran los pixeles en diagonal izquierda arriba y derecha abajo
-                elif (112.5 <= direccion[i,j] < 157.5):
-                    q = imagen[i + 1, j + 1] if i + 1 < h and j + 1 < w else 0
-                    r = imagen[i - 1, j - 1] if i - 1 >= 0 and j - 1 >= 0 else 0
-
-                if (imagen[i,j] >= q) and (imagen[i,j] >= r):
-                    Z[i,j] = imagen[i,j]
-                else:
-                    Z[i,j] = 0
-
-        Z[imagen < umbral1] = 0
-        Z[imagen >= umbral2] = 255
-        Z[(imagen >= umbral1) & (imagen < umbral2)] = 128
-        for i in range(h):
-            for j in range(w):
-                if Z[i,j] == 128:
-                    # Asegurarse de no salir del rango
-                    i_min = max(i-1, 0)
-                    i_max = min(i+2, h)
-                    j_min = max(j-1, 0)
-                    j_max = min(j+2, w)
-
-                    vecinos = Z[i_min:i_max, j_min:j_max]
-                    if np.any(vecinos == 255):
-                        Z[i,j] = 255
+    Z_copy = Z.copy()
+    cambios = True
+    while cambios:
+        cambios = False
+        for i in range(1, h-1):
+            for j in range(1, w-1):
+                if Z_copy[i,j] == 128:
+                    vecinos = [Z_copy[i-1,j], Z_copy[i+1,j], Z_copy[i,j-1], Z_copy[i,j+1],
+                            Z_copy[i-1,j-1], Z_copy[i-1,j+1], Z_copy[i+1,j-1], Z_copy[i+1,j+1]]
+                    if any(v == 255 for v in vecinos):
+                        Z_copy[i,j] = 255
+                        cambios = True
                     else:
-                        Z[i,j] = 0
-        bordes = Z
-        
-    else:
-        canales = cv2.split(imagen)
-        bordes_canales = []
-        for c, canal in enumerate(canales):
-            h, w = canal.shape[:2]
-            Z = np.zeros((h,w), dtype=np.float32)
-            for i in range(h):
-                for j in range(w):
+                        Z_copy[i,j] = 0
+    Z = Z_copy
+    bordes = Z.astype(np.uint8)
 
-                        ## Zona amarilla, se miran los pixeles de la izquierda y derecha
-                        if (0 <= direccion[i,j,c] < 22.5) or (157.5 <= direccion[i,j,c] <= 180):
-                            q = canal[i, j + 1] if j + 1 < w else 0
-                            r = canal[i, j - 1] if j - 1 >= 0 else 0
-
-                        # Zona verde, se miran los pixeles en diagonal derecha arriba y izquierda abajo
-                        elif (22.5 <= direccion[i,j,c] < 67.5):
-                            q = canal[i + 1, j - 1] if i + 1 < h and j - 1 >= 0 else 0
-                            r = canal[i - 1, j + 1] if i - 1 >= 0 and j + 1 < w else 0
-
-                        # Zona azul, se miran los pixeles arriba y abajo
-                        elif (67.5 <= direccion[i,j,c] < 112.5):
-                            q = canal[i + 1, j] if i + 1 < h else 0
-                            r = canal[i - 1, j] if i - 1 >= 0 else 0
-
-                        # Zona roja, se miran los pixeles en diagonal izquierda arriba y derecha abajo
-                        elif (112.5 <= direccion[i,j,c] < 157.5):
-                            q = canal[i + 1, j + 1] if i + 1 < h and j + 1 < w else 0
-                            r = canal[i - 1, j - 1] if i - 1 >= 0 and j - 1 >= 0 else 0
-
-                        if (canal[i,j] >= q) and (canal[i,j] >= r):
-                            Z[i,j] = canal[i,j]
-                        else:
-                            Z[i,j] = 0
-
-            Z[canal < umbral1] = 0
-            Z[canal >= umbral2] = 255
-            Z[(canal >= umbral1) & (canal < umbral2)] = 128
-            for i in range(h):
-                for j in range(w):
-                    if Z[i,j] == 128:
-                        # Asegurarse de no salir del rango
-                        i_min = max(i-1, 0)
-                        i_max = min(i+2, h)
-                        j_min = max(j-1, 0)
-                        j_max = min(j+2, w)
-
-                        vecinos = canal[i_min:i_max, j_min:j_max]
-                        if np.any(vecinos == 255):
-                            Z[i,j] = 255
-                        else:
-                            Z[i,j] = 0
-            bordes_canales.append(Z)
-        bordes = cv2.merge(bordes_canales)
-
-    completa = bordes.astype(np.uint8)
-
-    return completa
+    return bordes
 
 
 def susan_bordes(imagen,umbral=15, tipo="borde"):
@@ -793,3 +733,90 @@ def mostrar_tipo_susan(imagen_susan, imagen_original, tipo):
 
 
         return imagen_bgr.astype(np.uint8)
+
+def intercambio_de_pixeles(imagen, promedios, matriz):
+
+    theta0, theta1 = promedios
+
+    h, w = imagen.shape
+    matriz = matriz.copy()
+    
+    # Distancia Fd(x)
+    dist0 = np.abs(imagen - theta0) + 1e-6
+    dist1 = np.abs(imagen - theta1) + 1e-6
+    Fd = np.log(dist0 / dist1)
+
+    # --- Paso 1: Lout -> Lin ---
+    Lout_coords = np.argwhere(matriz == 1)
+    for x, y in Lout_coords:
+        if Fd[x, y] > 0:
+            matriz[x, y] = -1  # mover a Lin
+            # vecinos 4-conectados
+            for i, j in [(x-1,y),(x+1,y),(x,y-1),(x,y+1)]:
+                if 0 <= i < h and 0 <= j < w:
+                    if matriz[i,j] == 3:
+                        matriz[i,j] = 1  # agregar a Lout
+
+    # --- Paso 2: Actualizar Lin interior ---
+    Lin_coords = np.argwhere(matriz == -1)
+    for x, y in Lin_coords:
+        # si el píxel ya es interior según vecinos (ejemplo simple)
+        # se convierte en objeto
+        vecinos = []
+        for i, j in [(x-1,y),(x+1,y),(x,y-1),(x,y+1)]:
+            if 0 <= i < h and 0 <= j < w:
+                vecinos.append(matriz[i,j])
+        if all(v != 3 and v != 1 for v in vecinos):
+            matriz[x, y] = -3  # ahora interior
+
+    # --- Paso 3: Lin -> Lout ---
+    Lin_coords = np.argwhere(matriz == -1)
+    for x, y in Lin_coords:
+        if Fd[x, y] < 0:
+            matriz[x, y] = 1  # mover a Lout
+            # vecinos 4-conectados
+            for i, j in [(x-1,y),(x+1,y),(x,y-1),(x,y+1)]:
+                if 0 <= i < h and 0 <= j < w:
+                    if matriz[i,j] == -3:
+                        matriz[i,j] = -1  # agregar a Lin
+
+    # --- Paso 4: Actualizar Lout exterior ---
+    Lout_coords = np.argwhere(matriz == 1)
+    for x, y in Lout_coords:
+        vecinos = []
+        for i, j in [(x-1,y),(x+1,y),(x,y-1),(x,y+1)]:
+            if 0 <= i < h and 0 <= j < w:
+                vecinos.append(matriz[i,j])
+        if all(v != -3 and v != -1 for v in vecinos):
+            matriz[x, y] = 3  # ahora exterior
+
+    return matriz
+
+def matriz_a_visual(imagen, matriz, alpha=0.5):
+    """
+    Superpone la máscara de etiquetas sobre la imagen original.
+    alpha: transparencia de la máscara
+    Lout = azul, Lin = magenta, fondo = transparente, objeto = negro
+    """
+    # Aseguramos que la imagen sea RGB
+    if len(imagen.shape) == 2:
+        imagen_rgb = cv2.cvtColor(imagen, cv2.COLOR_GRAY2BGR)
+    else:
+        imagen_rgb = imagen.copy()
+
+    # Creamos la máscara en color
+    mask = np.zeros_like(imagen_rgb, dtype=np.uint8)
+
+    # Lout (azul)
+    mask[matriz == 1] = [255, 0, 0]
+
+    # Lin (magenta)
+    mask[matriz == -1] = [255, 0, 255]
+
+    # Fondo no se pinta, queda transparente (la máscara sigue en negro, no cambia la imagen original)
+
+    # Superposición con transparencia
+    visual = cv2.addWeighted(imagen_rgb, 1 - alpha, mask, alpha, 0)
+
+    return visual
+
