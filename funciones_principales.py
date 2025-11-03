@@ -635,32 +635,100 @@ def umbralizacion_Otsu(imagen,grises=True):
 
         return imagen_binaria, umbrales
 
+
+
+#This cell contains all functions used in Phase 2
+
+#2.a : Find closest direction D*
+def closest_dir_function(grad_dir) :
+    closest_dir_arr = np.zeros(grad_dir.shape)
+    for i in range(1, int(grad_dir.shape[0] - 1)) :
+        for j in range(1, int(grad_dir.shape[1] - 1)) :
+            
+            if((grad_dir[i, j] > -22.5 and grad_dir[i, j] <= 22.5) or (grad_dir[i, j] <= -157.5 and grad_dir[i, j] > 157.5)) :
+                closest_dir_arr[i, j] = 0
+                
+            elif((grad_dir[i, j] > 22.5 and grad_dir[i, j] <= 67.5) or (grad_dir[i, j] <= -112.5 and grad_dir[i, j] > -157.5)) :
+                closest_dir_arr[i, j] = 45
+                
+            elif((grad_dir[i, j] > 67.5 and grad_dir[i, j] <= 112.5) or (grad_dir[i, j] <= -67.5 and grad_dir[i, j] > -112.5)) : 
+                closest_dir_arr[i, j] = 90
+                
+            else:
+                closest_dir_arr[i, j] = 135
+                
+    return closest_dir_arr
+
+
+#2.b : Convert to thinned edge
+def non_maximal_suppressor(grad_mag, closest_dir) :
+    thinned_output = np.zeros(grad_mag.shape)
+    for i in range(1, int(grad_mag.shape[0] - 1)) :
+        for j in range(1, int(grad_mag.shape[1] - 1)) :
+            
+            if(closest_dir[i, j] == 0) :
+                if((grad_mag[i, j] > grad_mag[i, j+1]) and (grad_mag[i, j] > grad_mag[i, j-1])) :
+                    thinned_output[i, j] = grad_mag[i, j]
+                else :
+                    thinned_output[i, j] = 0
+            
+            elif(closest_dir[i, j] == 45) :
+                if((grad_mag[i, j] > grad_mag[i+1, j+1]) and (grad_mag[i, j] > grad_mag[i-1, j-1])) :
+                    thinned_output[i, j] = grad_mag[i, j]
+                else :
+                    thinned_output[i, j] = 0
+            
+            elif(closest_dir[i, j] == 90) :
+                if((grad_mag[i, j] > grad_mag[i+1, j]) and (grad_mag[i, j] > grad_mag[i-1, j])) :
+                    thinned_output[i, j] = grad_mag[i, j]
+                else :
+                    thinned_output[i, j] = 0
+            
+            else :
+                if((grad_mag[i, j] > grad_mag[i+1, j-1]) and (grad_mag[i, j] > grad_mag[i-1, j+1])) :
+                    thinned_output[i, j] = grad_mag[i, j]
+                else :
+                    thinned_output[i, j] = 0
+            
+    return thinned_output/np.max(thinned_output)   
     
 def bordes_canny(magnitud,direccion, umbral1=100, umbral2=200):
 
     h, w = magnitud.shape[:2]
     Z = np.zeros((h,w), dtype=np.float32)
+    sectors = np.zeros_like(direccion, dtype=np.uint8)
+    sectors[((direccion > -22.5) & (direccion <= 22.5)) |
+        ((direccion <= -157.5) | (direccion > 157.5))] = 0
+
+    # Sector 45°: diagonal ↗
+    sectors[((direccion > 22.5) & (direccion <= 67.5)) |
+            ((direccion <= -112.5) & (direccion > -157.5))] = 45
+
+    # Sector 90°: vertical
+    sectors[((direccion > 67.5) & (direccion <= 112.5)) |
+            ((direccion <= -67.5) & (direccion > -112.5))] = 90
+
+    # Sector 135°: diagonal ↖
+    sectors[((direccion > 112.5) & (direccion <= 157.5)) |
+            ((direccion <= -22.5) & (direccion > -67.5))] = 135
+
     for i in range(1, h-1):
         for j in range(1, w-1):
-            angle = direccion[i, j]
-            
-            if (0 <= angle < 22.5) or (157.5 <= angle <= 180):
-                q = magnitud[i, j+1]
-                r = magnitud[i, j-1]
-            elif (22.5 <= angle < 67.5):
-                q = magnitud[i-1, j+1]
-                r = magnitud[i+1, j-1]
-            elif (67.5 <= angle < 112.5):
-                q = magnitud[i+1, j]
-                r = magnitud[i-1, j]
-            elif (112.5 <= angle < 157.5):
-                q = magnitud[i-1, j-1]
-                r = magnitud[i+1, j+1]
-            
-            if (magnitud[i, j] >= q) and (magnitud[i, j] >= r):
-                Z[i, j] = magnitud[i, j]
-            else:
-                Z[i, j] = 0
+            val = magnitud[i, j]
+            sector = sectors[i, j]
+
+            if sector == 0:      # Horizontal
+                if val >= magnitud[i, j+1] and val >= magnitud[i, j-1]:
+                    Z[i, j] = val
+            elif sector == 45:   # Diagonal ↗
+                if val >= magnitud[i-1, j+1] and val >= magnitud[i+1, j-1]:
+                    Z[i, j] = val
+            elif sector == 90:   # Vertical
+                if val >= magnitud[i-1, j] and val >= magnitud[i+1, j]:
+                    Z[i, j] = val
+            else:                # 135° Diagonal ↖
+                if val >= magnitud[i-1, j-1] and val >= magnitud[i+1, j+1]:
+                    Z[i, j] = val
 
     Z[Z < umbral1] = 0
     Z[Z >= umbral2] = 255
@@ -820,3 +888,68 @@ def matriz_a_visual(imagen, matriz, alpha=0.5):
 
     return visual
 
+def transformada_de_hough(imagen_actual, imagen_original, umbral):
+    """
+    Implementación optimizada de la transformada de Hough.
+    """
+    alto, ancho = imagen_actual.shape[:2]
+
+    # Parámetros de la transformada de Hough
+    D = max(alto, ancho)
+    r_max = np.sqrt(2) * D
+    N_theta = 180
+    N_r = int(2 * r_max)
+
+    # Espacios de parámetros
+    theta = np.deg2rad(np.linspace(-90, 90, N_theta, endpoint=False))
+    r = np.linspace(-r_max, r_max, N_r)
+
+    # Matriz de parámetros
+    matriz_parametros = np.zeros((N_r, N_theta), dtype=np.float32)
+
+    # Coordenadas de los píxeles blancos
+    y_blancos, x_blancos = np.nonzero(imagen_actual)
+
+    # Precalcular coseno y seno de los ángulos
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
+
+    # Calcular r para cada píxel blanco y cada ángulo
+    for x, y in zip(x_blancos, y_blancos):
+        r_values = x * cos_theta + y * sin_theta
+        r_indices = np.round((r_values + r_max) * (N_r / (2 * r_max))).astype(int)
+        '''
+        Primero los paso a positivos, porque pueden ser negativos en: (r_values + r_max)
+        Luego se calcula el factor de la escala para mapear al rango discreto [0 , N_r -1]
+        Luego se aplica el factor de la escala para convertirlos en [0,N_r-1]
+        Luego se redondea
+
+        '''
+
+        # Incrementar los valores en la matriz de parámetros
+        valid_indices = (r_indices >= 0) & (r_indices < N_r)
+        matriz_parametros[r_indices[valid_indices], np.arange(N_theta)[valid_indices]] += 1
+
+    # Dibujar las líneas detectadas
+    imagen_color = cv2.cvtColor(imagen_original, cv2.COLOR_GRAY2BGR)
+    indices = np.argwhere(matriz_parametros > umbral)
+
+    print(f'Se van a dibujar {len(indices)} rectas')
+    for r_i, i_theta in indices:
+        rho = r[r_i]
+        t = theta[i_theta]
+        a = np.cos(t)
+        b = np.sin(t)
+        x0 = a * rho
+        y0 = b * rho
+
+        # Puntos extremos de la recta
+        x1 = int(x0 + 1000 * (-b))
+        y1 = int(y0 + 1000 * (a))
+        x2 = int(x0 - 1000 * (-b))
+        y2 = int(y0 - 1000 * (a))
+
+        # Validar coordenadas antes de dibujar
+        cv2.line(imagen_color, (x1, y1), (x2, y2), (0, 0, 255), 1)
+
+    return imagen_color

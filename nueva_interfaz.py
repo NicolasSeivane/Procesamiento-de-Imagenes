@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from tkinter import ttk
 import funciones_principales as fc
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
+import time 
 # ==================
 # Global State
 # ==================
@@ -448,7 +448,7 @@ def aplicar_ruido():
             imagen_ruidosa = ( (imagen_ruidosa - np.min(imagen_ruidosa)) / (np.max(imagen_ruidosa) - np.min(imagen_ruidosa)) ) * 255
 
     imagen_operativa = imagen_ruidosa.astype(np.uint8)
-    mostrar_histograma(ruido, tipo_ruido)
+    #mostrar_histograma(ruido, tipo_ruido)
     mostrar_imagen(imagen_operativa, lblOutputImage)
 
 def pedir_parametros_ruido():
@@ -677,6 +677,14 @@ def resaltar_capa_preview(capa):
     imagen_operativa = salida
     mostrar_imagen(imagen_operativa, lblOutputImage)
 
+def hacer_gris():
+    global imagen_actual, imagen_operativa
+
+    imagen_operativa = cv2.cvtColor(imagen_actual, cv2.COLOR_BGR2GRAY)
+
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+
+
 def aplicar_operacion_permanente():
     global imagen_actual, imagen_operativa
     if imagen_operativa is None:
@@ -836,7 +844,7 @@ dynamic_controls_frame = ttk.Frame(frm_ops)
 dynamic_controls_frame.pack(side="left", padx=10)
 
 # Dropdown for operations
-opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral", "Canny","Susan", "Intercambio de Pixeles"]
+opciones = ["Seleccionar Operación", "Umbral","Umbral iterativo","Umbral Otsu", "Gamma Correction","Grises", "Resaltar B", "Resaltar G", "Resaltar R", "Función Negativo", "Histograma grises", "Ecualización", "Ruido", "Filtro Kernel", "Prewitt Magnitud", "Sobel Magnitud", "Cruces por cero", "Cruces por umbral", "Difusion Isotropica","Difusion Anstropica", "Filtro Bilateral", "Canny","Susan", "Intercambio de Pixeles", "Transformada de Hough"]
 opcion_seleccionada = tk.StringVar(root)
 opcion_seleccionada.set(opciones[0])
 menu_opciones = ttk.OptionMenu(frm_ops, opcion_seleccionada, *opciones, command=lambda op: mostrar_controles(op))
@@ -1174,7 +1182,7 @@ umbral2 = None
 sigma_var = None
 
 def bordes_canny():
-    global imagen_actual, imagen_operativa, umbral1, umbral2, sigma_var
+    global imagen_actual, imagen_operativa, umbral1, umbral2, sigma_var, roi_actual
 
     if imagen_actual is None:
         set_status("Primero cargá una imagen base.")
@@ -1188,37 +1196,50 @@ def bordes_canny():
     kernel_init = np.exp(-(xx**2 + yy**2) / (2 * sigma**2))
 
     ## Primero aplicamos filtro gaussiano
-    mascara_horizontal = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
-    mascara_vertical = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+    #mascara_horizontal = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
+    #mascara_vertical = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
 
     if len(imagen_original.shape) == 3:
         imagen_original = cv2.cvtColor(imagen_original, cv2.COLOR_BGR2GRAY)
 
-    imagen_original = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=True,prewitt=False)
-    sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True, prewitt=False, estandarizar=False)
-    sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True, prewitt=False, estandarizar=False)
+    imagen_ruidosa = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=True)
+    #sobel_horizontal = fc.mascara(imagen_ruidosa, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True)
+    #sobel_vertical = fc.mascara(imagen_ruidosa, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True)
+
+    sobel_x = cv2.Sobel(imagen_ruidosa, cv2.CV_64F, 1, 0, ksize=3)
+    ## El problema estaba en Sobel??
+    # Aplicar el filtro Sobel en la dirección Y (vertical)
+    sobel_y = cv2.Sobel(imagen_ruidosa, cv2.CV_64F, 0, 1, ksize=3)
+
+    magnitud = np.hypot(sobel_x,sobel_y)
+
+    direccion = np.arctan2(sobel_y, sobel_x)
+
+    direccion = np.degrees(direccion)
 
 
-    magnitud = np.sqrt(sobel_horizontal.astype(np.float32)**2 + sobel_vertical.astype(np.float32)**2).astype(np.float32)
-    print(f'magnitud: {np.min(magnitud)}, {np.max(magnitud)}')
-    direccion = np.arctan2(sobel_vertical, sobel_horizontal)
-    print(f'direccion min y max antes de grados: {np.min(direccion)}, {np.max(direccion)}')
-    direccion = np.rad2deg(direccion)
-    print(f'direccion min y max despues de grados: {np.min(direccion)}, {np.max(direccion)}')
-    direccion[direccion < 0] += 180
-    print(f'direccion min y max despues de ajuste: {np.min(direccion)}, {np.max(direccion)}')
-    magnitud = magnitud.astype(np.float32)
-    magnitud = np.clip(magnitud, 0, 255).astype(np.float32)
-    print(f'magnitud min y max despues de normalizacion: {np.min(magnitud)}, {np.max(magnitud)}')
+    magnitud_norm = cv2.normalize(magnitud, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+    magnitud_norm = magnitud_norm.astype(np.float32)
     
 
-    bordes = fc.bordes_canny(magnitud,direccion,umbral1=int(umbral1),umbral2=int(umbral2))
+    bordes = fc.bordes_canny(magnitud_norm,direccion,umbral1=int(umbral1),umbral2=int(umbral2))
 
+    #bordes = cv2.Canny(imagen_original,100,200)
     imagen_operativa = bordes
 
-
+    
     mostrar_imagen(imagen_operativa, lblOutputImage)
-    set_status(f"Bordes Canny aplicado a la imagen de trabajo.")
+
+    umbral2 = fc.umbralizacion_Otsu(magnitud_norm,grises=True)[1]
+    
+    umbral1 = 0.5 * umbral2
+
+    bordes = fc.bordes_canny(magnitud_norm,direccion,umbral1=int(umbral1),umbral2=int(umbral2))
+
+    roi_actual = bordes
+
+    mostrar_imagen(roi_actual, lblROI)
+    set_status(f"Bordes Canny aplicado a la imagen de trabajo, con umbrales {umbral1, umbral2}")
 
 
 umbral_susan = None
@@ -1470,6 +1491,11 @@ def intercambio_de_pixeles():
         imagen_operativa = fc.matriz_a_visual(imagen_actual, matriz_final) 
         mostrar_imagen(imagen_operativa, lblOutputImage)
 
+        root.update()
+
+
+        time.sleep(0.25)  # Pausa para visualizar el progreso
+
         # Comprobamos si hubo cambios
         if np.array_equal(matriz_final, matriz_anterior):
             set_status(f"No hubo cambios en la iteración {i+1}. Se detiene.")
@@ -1477,6 +1503,90 @@ def intercambio_de_pixeles():
 
 
 ttk.Button(frm_file_ops, text="Seleccionar Regiones y rectángulos", command=pedir_seleccion_regiones_y_rectangulo).pack(side="left", padx=7)
+
+umbral_hough = None
+
+def transformada_de_hough():
+    global imagen_actual, imagen_operativa, umbral_hough
+    if imagen_actual is None:
+            set_status("Primero cargá una imagen base.")
+            return
+    
+    
+
+    if len(imagen_actual.shape) == 3:
+        imagen_actual = cv2.cvtColor(imagen_actual, cv2.COLOR_BGR2GRAY)
+
+    imagen_original = imagen_actual.copy().astype(np.float32)
+    sigma = 1
+    t = int((2*sigma )+1)
+    ax = np.linspace(-(t - 1) / 2, (t - 1) / 2, t) # Genera un arreglo de coordenadas lineales entre -(t-1)/2 y (t-1)/2.
+    xx, yy = np.meshgrid(ax, ax) # Crea dos matrices 2D que representan las coordenadas X e Y de una cuadrícula de tamaño t x t
+    kernel_init = np.exp(-(xx**2 + yy**2) / (2 * sigma**2))
+
+    ## Primero aplicamos filtro gaussiano
+    #mascara_horizontal = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
+    #mascara_vertical = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+
+    imagen_ruidosa = fc.mascara(imagen_original, kernel_init, "Gaussiano", grises=True,estandarizar=True,prewitt=False)
+    #sobel_horizontal = fc.mascara(imagen_original, mascara=mascara_horizontal, tipo_kernel="Sobel Horizontal",grises=True, prewitt=False, estandarizar=False)
+    #sobel_vertical = fc.mascara(imagen_original, mascara=mascara_vertical, tipo_kernel="Sobel Vertical",grises=True, prewitt=False, estandarizar=False)
+
+    sobel_x = cv2.Sobel(imagen_ruidosa, cv2.CV_64F, 1, 0, ksize=3)
+    ## El problema estaba en Sobel??
+    # Aplicar el filtro Sobel en la dirección Y (vertical)
+    sobel_y = cv2.Sobel(imagen_ruidosa, cv2.CV_64F, 0, 1, ksize=3)
+
+    magnitud = np.hypot(sobel_x,sobel_y)
+
+    direccion = np.arctan2(sobel_y, sobel_x)
+
+    direccion = np.degrees(direccion)
+
+
+    magnitud_norm = cv2.normalize(magnitud, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+    magnitud_norm = magnitud_norm.astype(np.float32)
+    
+
+    
+
+    umbral2 = fc.umbralizacion_Otsu(magnitud_norm,grises=True)[1]
+    
+    umbral1 = 0.5 * umbral2
+    magnitud = np.clip(magnitud, 0, 255).astype(np.float32)
+
+    print(umbral1,umbral2)
+
+    print(f'magnitud min y max despues de normalizacion: {np.min(magnitud_norm)}, {np.max(magnitud_norm)}')
+
+    bordes = fc.bordes_canny(magnitud_norm,direccion,umbral1=int(umbral1),umbral2=int(umbral2))
+
+    #bordes = cv2.Canny(imagen_original, umbral1, umbral2)
+
+    #bordes = fc.bordes_canny(magnitud,direccion, umbral1 = int(umbral1), umbral2 = int(umbral2))
+
+    imagen_operativa = bordes
+
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+
+    root.update()
+
+    time.sleep(5)
+
+    imagen_operativa = fc.transformada_de_hough(bordes.astype(np.float32),imagen_original, umbral=umbral_hough)
+
+    imagen_operativa = imagen_operativa.astype(np.uint8)
+
+    mostrar_imagen(imagen_operativa, lblOutputImage)
+    set_status("Transformada de Hough aplicada a la imagen de trabajo.")
+
+def pedir_hough():
+    global umbral_hough
+
+    umbral_hough = simpledialog.askfloat("Umbral Hough", "Ingrese el umbral")
+
+    transformada_de_hough()
+
 
 # --- Math Operations Collapsible Panel ---
 math_panel_container = ttk.Frame(frm_ops)
@@ -1588,4 +1698,9 @@ def mostrar_controles(opcion):
     elif opcion == "Intercambio de Pixeles":
         ttk.Button(dynamic_controls_frame, text="Aplicar Intercambio de Pixeles", command=intercambio_de_pixeles).pack(side="left", padx=5)
 
+    elif opcion == "Transformada de Hough":
+        ttk.Button(dynamic_controls_frame, text="Aplicar Transformada de Hough", command=pedir_hough).pack(side="left", padx=5)
+
+    elif opcion == "Grises":
+        ttk.Button(dynamic_controls_frame, text="Aplicar Grises", command=hacer_gris).pack(side="left", padx=5)
 root.mainloop()
