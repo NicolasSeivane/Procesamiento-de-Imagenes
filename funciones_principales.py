@@ -861,11 +861,7 @@ def intercambio_de_pixeles(imagen, promedios, matriz):
     return matriz
 
 def matriz_a_visual(imagen, matriz, alpha=0.5):
-    """
-    Superpone la máscara de etiquetas sobre la imagen original.
-    alpha: transparencia de la máscara
-    Lout = azul, Lin = magenta, fondo = transparente, objeto = negro
-    """
+
     # Aseguramos que la imagen sea RGB
     if len(imagen.shape) == 2:
         imagen_rgb = cv2.cvtColor(imagen, cv2.COLOR_GRAY2BGR)
@@ -889,28 +885,21 @@ def matriz_a_visual(imagen, matriz, alpha=0.5):
     return visual
 
 def transformada_de_hough(imagen_actual, imagen_original, umbral):
-    """
-    Implementación optimizada de la transformada de Hough.
-    """
+
     alto, ancho = imagen_actual.shape[:2]
 
-    # Parámetros de la transformada de Hough
     D = max(alto, ancho)
     r_max = np.sqrt(2) * D
     N_theta = 180
     N_r = int(2 * r_max)
 
-    # Espacios de parámetros
     theta = np.deg2rad(np.linspace(-90, 90, N_theta, endpoint=False))
     r = np.linspace(-r_max, r_max, N_r)
 
-    # Matriz de parámetros
     matriz_parametros = np.zeros((N_r, N_theta), dtype=np.float32)
 
-    # Coordenadas de los píxeles blancos
     y_blancos, x_blancos = np.nonzero(imagen_actual)
 
-    # Precalcular coseno y seno de los ángulos
     cos_theta = np.cos(theta)
     sin_theta = np.sin(theta)
 
