@@ -1572,8 +1572,6 @@ def transformada_de_hough():
 
     root.update()
 
-    time.sleep(5)
-
     imagen_operativa = fc.transformada_de_hough(bordes.astype(np.float32),imagen_original, umbral=umbral_hough, epsilon=epsilon)
 
     imagen_operativa = imagen_operativa.astype(np.uint8)
