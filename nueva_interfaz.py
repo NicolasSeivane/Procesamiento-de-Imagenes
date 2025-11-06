@@ -1505,9 +1505,10 @@ def intercambio_de_pixeles():
 ttk.Button(frm_file_ops, text="Seleccionar Regiones y rectángulos", command=pedir_seleccion_regiones_y_rectangulo).pack(side="left", padx=7)
 
 umbral_hough = None
+epsilon = None
 
 def transformada_de_hough():
-    global imagen_actual, imagen_operativa, umbral_hough
+    global imagen_actual, imagen_operativa, umbral_hough, epsilon
     if imagen_actual is None:
             set_status("Primero cargá una imagen base.")
             return
@@ -1573,7 +1574,7 @@ def transformada_de_hough():
 
     time.sleep(5)
 
-    imagen_operativa = fc.transformada_de_hough(bordes.astype(np.float32),imagen_original, umbral=umbral_hough)
+    imagen_operativa = fc.transformada_de_hough(bordes.astype(np.float32),imagen_original, umbral=umbral_hough, epsilon=epsilon)
 
     imagen_operativa = imagen_operativa.astype(np.uint8)
 
@@ -1581,9 +1582,10 @@ def transformada_de_hough():
     set_status("Transformada de Hough aplicada a la imagen de trabajo.")
 
 def pedir_hough():
-    global umbral_hough
+    global umbral_hough, epsilon
 
     umbral_hough = simpledialog.askfloat("Umbral Hough", "Ingrese el umbral")
+    epsilon = simpledialog.askfloat("Epsilon Hough", "Ingrese el Epsilon")
 
     transformada_de_hough()
 
