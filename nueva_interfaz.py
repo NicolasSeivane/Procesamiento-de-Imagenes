@@ -1504,6 +1504,8 @@ def intercambio_de_pixeles():
 
 ttk.Button(frm_file_ops, text="Seleccionar Regiones y rectángulos", command=pedir_seleccion_regiones_y_rectangulo).pack(side="left", padx=7)
 
+
+
 umbral_hough = None
 epsilon = None
 
@@ -1703,4 +1705,79 @@ def mostrar_controles(opcion):
 
     elif opcion == "Grises":
         ttk.Button(dynamic_controls_frame, text="Aplicar Grises", command=hacer_gris).pack(side="left", padx=5)
+
+
+
+umbral_cruces = None
+
+def algoritmo_sift():
+    global imagen_actual, imagen_operativa, imagen_original, umbral_matching, roi_actual
+    if imagen_original is None:
+        set_status("Primero cargá una imagen base.")
+        return
+    file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff")])
+    if not file_path: return
+    otra = cv2.imread(file_path, cv2.IMREAD_COLOR)
+    if otra is None:
+        set_status("No se pudo abrir la imagen a restar.")
+        return
+
+    # Convertir a escala de grises y uint8
+    img1 = cv2.cvtColor(imagen_actual, cv2.COLOR_BGR2GRAY).astype(np.uint8)
+    img2 = cv2.cvtColor(otra, cv2.COLOR_BGR2GRAY).astype(np.uint8)
+
+    # Detectar keypoints para ambas imágenes en color
+    sift = cv2.SIFT_create()    
+    kp1, _ = sift.detectAndCompute(img1, None)
+    kp2, _ = sift.detectAndCompute(img2, None)
+
+    # Dibujar keypoints sobre las imágenes originales en color
+    img1_color = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
+    img2_color = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
+    img1_kp = cv2.drawKeypoints(img1_color, kp1, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    img2_kp = cv2.drawKeypoints(img2_color, kp2, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
+    # Mostrar matches en lblOutputImage
+    imagen_operativa = fc.sift_opencv(img1, img2, umbral_matching=umbral_matching)
+
+    roi_actual = img2_kp
+    imagen_actual = img1_kp
+    
+    mostrar_imagen(imagen_operativa, lblOutputImage, 700)
+    # Mostrar keypoints individuales en lblROI
+    mostrar_imagen(roi_actual, lblROI, 300)
+    mostrar_imagen(imagen_actual, lblInputImage, 300)
+    set_status("SIFT aplicado a la imagen de trabajo.")
+
+def pedir_sift():
+    global umbral_matching
+
+    umbral_matching = simpledialog.askfloat("Umbral Matching", "Ingrese el umbral para el matching")
+
+    algoritmo_sift()
+
+
+ttk.Button(frm_file_ops, text="SIFT Algoritmo", command=pedir_sift).pack(side="left", padx=8)
+
+ttk.Button(frm_file_ops, text="SIFT Algoritmo cv2", command=pedir_sift).pack(side="left", padx=9)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 root.mainloop()
