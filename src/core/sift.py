@@ -713,28 +713,3 @@ def plot_SAR_matching(image1, image2, matching_points, maximum=0.25):
 
     plt.tight_layout()
     plt.show()
-    
-#%%
-I1 = Image.open('C:\\Users\\User\\Documents\\GitHub\\Procesamiento-de-Imagenes\\ImagenesApropiadasTP4\\Alonso_El pintor caminante.jpg') 
-I2 = Image.open('C:\\Users\\User\\Documents\\GitHub\\Procesamiento-de-Imagenes\\ImagenesApropiadasTP4\\ElCaminanteAlonso.jpg') 
-I1_array = np.array(I1)
-I2_array = np.array(I2)
-plt.imshow(I1_array[:,:,1], cmap='gray')
-plt.title('Prueba')
-plt.axis('off')
-plt.show()
-print('Iniciando SIFT...')
-
-
-keydes_I1 = SIFT_keypoints_descriptors(I1_array[:,:,1])
-keydes_I2 = SIFT_keypoints_descriptors(I2_array[:,:,1])
-print('Keypoints y descriptores obtenidos.')
-print(f'Número de keypoints en la imagen 1: {len(keydes_I1)}')
-print(f'Número de keypoints en la imagen 2: {len(keydes_I2)}')
-# Find matches
-image_matching = matching(keydes_I1, keydes_I2, threshold_matching = 1)#0.8)
-
-# Plot matches
-plot_matching(I1_array[:,:,1], I2_array[:,:,1], image_matching)    
-
-

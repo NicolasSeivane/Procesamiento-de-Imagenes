@@ -1,6 +1,15 @@
-tk
-opencv-python
-imutils
-numpy
-Pillow
-matplotlib
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+matplotlib>=3.7.0
+imutils>=0.5.4
+
+# Performance optimization (compiles Python to C)
+numba>=0.58.0
+
+# Web interface (for streamlit version)
+streamlit>=1.28.0
+
+# GUI (built-in with Python, no installation needed)
+# tkinter

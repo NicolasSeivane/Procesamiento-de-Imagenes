@@ -6,7 +6,11 @@ import imutils
 import numpy as np
 import matplotlib.pyplot as plt
 from tkinter import ttk
-import funciones_principales as fc
+import sys
+import os
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.core import image_processing_opencv as fc
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time 
 # ==================
